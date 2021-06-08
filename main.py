@@ -1,36 +1,33 @@
 from selenium import webdriver
 from selenium.webdriver.support.wait import WebDriverWait 
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from time import sleep
 from twilio.rest import Client 
+from configparser import ConfigParser
 
-
-MODE = "GETCODE" # GETCODE or GETDATE
-account_sid = '' #for twilio
-auth_token = '' # for twilio
-
-
-code = "XXXX-XXXX-XXXX" 
-number = ""
-locations = [''] # if you have a code only use one entry
+config = ConfigParser()
+config.read("config.ini")
 
 class VaccineBot:
     def __init__(self):
-
+        options = FirefoxOptions()
+        if config['Mode']['Headless'] == "True":
+            options.add_argument("--headless")
         self.url = "https://www.impfterminservice.de/impftermine"
-        self.driver = webdriver.Chrome()
+        self.driver = webdriver.Firefox(options=options)
+        self.driver.set_window_size(3840,2160)
     
-    def checkCodes(self, locations):
-        #Visit URL
-        print("HERE")
-        self.driver.get(self.url)        
-        sleep(2)
-
-        # Select Impfzentrum
-        self.driver.find_element_by_xpath("/html/body/app-root/div/app-page-its-center/div/div[2]/div/div/div/div/form/div[3]/app-corona-vaccination-center/div[1]/label/span[2]/span[1]/span").click()
-        self.driver.find_element_by_xpath("//li[contains(text(), ' Baden-Württemberg ')]").click()
-
+    def checkCodes(self):
+        locations = config['Data']['locations'].split("/")
         for location in locations:
-            print(location)
+            #Visit URL
+            self.driver.get(self.url)        
+            sleep(2)
+
+            # Select Impfzentrum
+            self.driver.find_element_by_xpath("/html/body/app-root/div/app-page-its-center/div/div[2]/div/div/div/div/form/div[3]/app-corona-vaccination-center/div[1]/label/span[2]/span[1]/span").click()
+            self.driver.find_element_by_xpath("//li[contains(text(), ' {} ')]".format(config['Data']['federal_state'])).click()
+
             self.driver.find_element_by_xpath("/html/body/app-root/div/app-page-its-center/div/div[2]/div/div/div/div/form/div[3]/app-corona-vaccination-center/div[2]/label/span[2]/span[1]/span").click()
             self.driver.find_element_by_xpath(f"//li[contains(text(), '{location}')]").click()
             self.driver.find_element_by_xpath("//button[contains(text(), ' Zum Impfzentrum ')]").click()
@@ -49,26 +46,26 @@ class VaccineBot:
                 self.driver.find_element_by_xpath("//span[contains(text(), ' Nein ')]").click()
                 sleep(10)
             except:
-                return ""
+                pass
 
             try:
                 self.driver.find_element_by_xpath("//div[contains(text(), ' Es wurden keine freien Termine in Ihrer Region gefunden. Bitte probieren Sie es später erneut. ')]")
-                return ""
+                pass
             except:
                 self.driver.close()
                 return location
         
-    def checkAppointments(self, code, location):
+    def checkAppointments(self):
         #Visit URL
         self.driver.get(self.url)        
         sleep(2)
 
         # Select Impfzentrum
         self.driver.find_element_by_xpath("/html/body/app-root/div/app-page-its-center/div/div[2]/div/div/div/div/form/div[3]/app-corona-vaccination-center/div[1]/label/span[2]/span[1]/span").click()
-        self.driver.find_element_by_xpath("//li[contains(text(), ' Baden-Württemberg ')]").click()
+        self.driver.find_element_by_xpath("//li[contains(text(), ' {} ')]".format(config['Data']['federal_state'])).click()
 
         self.driver.find_element_by_xpath("/html/body/app-root/div/app-page-its-center/div/div[2]/div/div/div/div/form/div[3]/app-corona-vaccination-center/div[2]/label/span[2]/span[1]/span").click()
-        self.driver.find_element_by_xpath(f"//li[contains(text(), '{location}')]").click()
+        self.driver.find_element_by_xpath("//li[contains(text(), '{}')]".format(config['Data']['locations'].split("/")[0])).click()
         self.driver.find_element_by_xpath("//button[contains(text(), ' Zum Impfzentrum ')]").click()
         sleep(2)
 
@@ -86,7 +83,7 @@ class VaccineBot:
             sleep(1)
         except:
             return False
-        code_list = code.split("-")
+        code_list = config['Data']['code'].split("-")
         for index, value in enumerate(code_list):
             self.driver.find_element_by_xpath(f"//input[@name='ets-input-code-{index}']").send_keys(value)
 
@@ -104,27 +101,27 @@ class VaccineBot:
             self.driver.close()
             return True
 
-    def sendNotification(self, text, number):
+    def sendNotification(self, text):
  
-        client = Client(account_sid, auth_token) 
+        client = Client(config['Twilio']['account_sid'],config['Twilio']['auth_token']) 
         
         message = client.messages.create( 
-                                    from_='whatsapp:+14155238886',  
+                                    from_='whatsapp:{}'.format(config['Twilio']['twilio_number']),  
                                     body=text,      
-                                    to=f'whatsapp:{number}' 
+                                    to='whatsapp:{}'.format(config['Twilio']['your_number']) 
                                 ) 
 
 mybot = VaccineBot()
 while True:
-    if MODE == "GETDATE":
-        AppointmentsExist = mybot.checkAppointments(code, locations[0])
+    if config['Mode']['MODE'] == "GETDATE":
+        AppointmentsExist = mybot.checkAppointments()
         if AppointmentsExist:
-            mybot.sendNotification("Impftermine sind frei.", number)
+            mybot.sendNotification("Impftermine sind frei.")
             break
         sleep(600)
-    if MODE == "GETCODE":
-        Location = mybot.checkCodes(locations)
-        if len(Location) > 0:
-            mybot.sendNotification(f"Impfcodes sind verfügbar in{Location}.", number)
+    if config['Mode']['MODE'] == "GETCODE":
+        Location = mybot.checkCodes()
+        if isinstance(Location, str):
+            mybot.sendNotification(f"Impfcodes sind verfügbar in{Location}.")
             break
         sleep(600)
