@@ -2,6 +2,10 @@
 
 This bot is created to help you get an appointment in one of the german Covid-19 Vaccination stations connected to [impfterminservice.de](https://www.impfterminservice.de) by accessing the website every 10 minutes. You can use it to get notified about available codes or if you already have one about potential dates for your vaccination.
 
+## Disclaimer:
+
+Please note that the website [impfterminservice.de](https://www.impfterminservice.de), where you could previously book vaccination appointments, no longer exists.
+
 ## Installation
 
 First you need to clone this repo to your local machine.
